@@ -6,6 +6,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import com.droiddeck.launcher.SessionActivity
+import com.droiddeck.launcher.session.SessionPrefs
 import com.droiddeck.launcher.session.SessionService
 import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.wayland.WaylandCompositor
@@ -33,9 +34,11 @@ class SessionInputPointerTest {
     private lateinit var output: InputOutput
     private var previousSize = SessionState.outputSize
     private var previousMode = SessionState.mode
+    private var previousSteamUi = SessionState.steamUi
 
     @Before fun setUp() {
         activity = Robolectric.buildActivity(SessionActivity::class.java).get()
+        SessionPrefs.setHideCursorOnPad(activity, true)
         output = ReflectionHelpers.getField(activity, "inputOutput")
         ReflectionHelpers.setField(activity, "surfaceView", SurfaceView(activity).apply { layout(0, 0, 1000, 600) })
         SessionState.outputSize = 1600 to 900
@@ -54,6 +57,7 @@ class SessionInputPointerTest {
         shadowOf(Looper.getMainLooper()).idle()
         SessionState.outputSize = previousSize
         SessionState.mode = previousMode
+        SessionState.steamUi = previousSteamUi
     }
 
     @Test fun desktopMouseButtonsKeepTheVisibleCursorAndDeliverImmediately() {
@@ -69,8 +73,102 @@ class SessionInputPointerTest {
     @Test fun nativeGameInputStillHidesCursor() {
         InputProfiles.select(activity, InputProfile.GAME)
         refresh()
+        assertFalse(ReflectionHelpers.getField<Boolean>(activity, "inputUsesPointer"))
         state<Boolean>("cursorVisible").value = true
         invoke("onPadInput")
+        assertFalse(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun aControllerKeepsTheCursorVisibleWhenTheAutoHideIsOff() {
+        InputProfiles.select(activity, InputProfile.GAME)
+        refresh()
+        assertFalse(ReflectionHelpers.getField<Boolean>(activity, "inputUsesPointer"))
+        state<Boolean>("hideCursorOnPad").value = false
+        state<Boolean>("cursorVisible").value = true
+        invoke("onPadInput")
+        assertTrue(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun aPointerMoveIsNoLongerSuppressedAfterAPadPressWhenTheAutoHideIsOff() {
+        InputProfiles.select(activity, InputProfile.GAME)
+        refresh()
+        assertFalse(ReflectionHelpers.getField<Boolean>(activity, "inputUsesPointer"))
+        val pointer = ReflectionHelpers.getField<PointerGestures.Listener>(activity, "pointerListener")
+        ReflectionHelpers.setField(activity, "lastPadInputMs", android.os.SystemClock.uptimeMillis())
+        pointer.onMove(500f, 300f)
+        assertFalse(state<Boolean>("cursorVisible").value)
+        state<Boolean>("hideCursorOnPad").value = false
+        pointer.onMove(500f, 300f)
+        assertTrue(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun epicPadNavigationKeepsTheCursorWhenTheAutoHideIsOff() {
+        val padMouse = ReflectionHelpers.getField<PadMouse.Listener>(activity, "padMouseListener")
+        state<Boolean>("cursorVisible").value = true
+        padMouse.onNavigate()
+        assertFalse(state<Boolean>("cursorVisible").value)
+        state<Boolean>("hideCursorOnPad").value = false
+        state<Boolean>("cursorVisible").value = true
+        padMouse.onNavigate()
+        assertTrue(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun aPadScrollMovesTheCursorToTheScrolledPointerWhenTheAutoHideIsOff() {
+        val padMouse = ReflectionHelpers.getField<PadMouse.Listener>(activity, "padMouseListener")
+        state<Boolean>("cursorVisible").value = true
+        padMouse.onScrollStart()
+        assertFalse(state<Boolean>("cursorVisible").value)
+        state<Boolean>("hideCursorOnPad").value = false
+        state<Offset>("cursorPos").value = Offset(10f, 10f)
+        padMouse.onScrollStart()
+        assertEquals(Offset(985f, 300f), state<Offset>("cursorPos").value)
+        assertTrue(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun theSteamUiDoesNotAutoHideTheCursorWhenTheAutoHideIsOff() {
+        state<Boolean>("directCursorOn").value = true
+        SessionState.mode = SessionService.MODE_STEAM
+        SessionState.steamUi = "bigpicture"
+        state<Boolean>("hideCursorOnPad").value = false
+        showCursor(10f, 10f)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2600))
+        assertTrue(state<Boolean>("cursorVisible").value)
+        state<Boolean>("hideCursorOnPad").value = true
+        showCursor(10f, 10f)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2600))
+        assertFalse(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun readPrefsAppliesThePadCursorAutoHide() {
+        SessionPrefs.setHideCursorOnPad(activity, false)
+        invoke("readPrefs")
+        assertFalse(state<Boolean>("hideCursorOnPad").value)
+        SessionPrefs.setHideCursorOnPad(activity, true)
+        invoke("readPrefs")
+        assertTrue(state<Boolean>("hideCursorOnPad").value)
+    }
+
+    @Test fun turningTheAutoHideOffShowsAHiddenCursor() {
+        state<Offset>("cursorPos").value = Offset(500f, 300f)
+        state<Boolean>("cursorVisible").value = false
+        SessionPrefs.setHideCursorOnPad(activity, false)
+        invoke("readPrefs")
+        assertTrue(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun turningTheAutoHideOffKeepsAProgramHiddenCursorHidden() {
+        state<Offset>("cursorPos").value = Offset(500f, 300f)
+        ReflectionHelpers.setField(activity, "clientHidesCursor", true)
+        SessionPrefs.setHideCursorOnPad(activity, false)
+        invoke("readPrefs")
+        assertFalse(state<Boolean>("cursorVisible").value)
+    }
+
+    @Test fun turningTheAutoHideOffDoesNotShowACursorUnderPointerLock() {
+        state<Offset>("cursorPos").value = Offset(500f, 300f)
+        ReflectionHelpers.setField(activity, "pointerLocked", true)
+        SessionPrefs.setHideCursorOnPad(activity, false)
+        invoke("readPrefs")
         assertFalse(state<Boolean>("cursorVisible").value)
     }
 
@@ -304,6 +402,10 @@ class SessionInputPointerTest {
     private fun refresh() = invoke("refreshInputProfile")
     private fun invoke(name: String) = ReflectionHelpers.callInstanceMethod<Unit>(activity, name)
     private fun <T> state(name: String): MutableState<T> = ReflectionHelpers.getField(activity, "$name\$delegate")
+    private fun showCursor(x: Float, y: Float) = ReflectionHelpers.callInstanceMethod<Unit>(activity, "showCursor",
+        ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, x),
+        ReflectionHelpers.ClassParameter.from(Float::class.javaPrimitiveType, y),
+        ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false))
 
     @Implements(value = WaylandCompositor::class, isInAndroidSdk = false)
     class CompositorShadow {

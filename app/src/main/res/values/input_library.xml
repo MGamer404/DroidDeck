@@ -101,6 +101,8 @@
     <string name="input_virtual_controller">Virtual controller</string>
     <string name="input_touchscreen">Touchscreen</string>
     <string name="input_touch_cursor">Touch cursor</string>
+    <string name="input_hide_cursor_on_pad">Hide the cursor during controller play</string>
+    <string name="input_hide_cursor_on_pad_hint">The pointer disappears as soon as you press a controller button or move a stick. Turn off to stop controller input hiding it.</string>
     <string name="input_touch_hold">Touch and hold</string>
     <string name="input_back_taps">Back button taps</string>
     <string name="input_toggle_button">Toggle button</string>

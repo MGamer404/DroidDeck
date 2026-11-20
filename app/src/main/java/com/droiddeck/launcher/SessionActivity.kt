@@ -538,6 +538,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
     private var lowLatency by mutableStateOf(true)
     private var evdevMouseOn by mutableStateOf(false)
     private var directCursorOn by mutableStateOf(false)
+    private var hideCursorOnPad by mutableStateOf(true)
     private var mouseWriter: com.droiddeck.launcher.input.FakeInputWriter? = null
     private var evdevMouseActive = false
     private var lastMouseX = Float.NaN
@@ -1737,6 +1738,11 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
                 directCursorOn = on
                 if (!on && directTouchCursorHidden()) cursorVisible = false
             },
+            hideCursorOnPad = hideCursorOnPad,
+            onHideCursorOnPad = { on ->
+                SessionPrefs.setHideCursorOnPad(this@SessionActivity, on)
+                applyHideCursorOnPad(on)
+            },
             onOsc = { v ->
                 SessionPrefs.setOscMode(this@SessionActivity, v)
                 controlsHiddenByTap = false
@@ -2588,6 +2594,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         evdevMouseOn = SessionPrefs.evdevMouse(this)
         if (!evdevMouseOn) releaseEvdevMouse()
         directCursorOn = SessionPrefs.directCursor(this)
+        applyHideCursorOnPad(SessionPrefs.hideCursorOnPad(this))
         padType = SessionPrefs.steamController(this)
     }
 
@@ -3950,7 +3957,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             val rect = pointerSurfaceRect() ?: return
             val x = rect.left + rect.width() * PAD_SCROLL_POINTER_X
             WaylandCompositor.nativeSendPointer(1, InputSpace.x(x, outputView().width), InputSpace.y(rect.centerY(), outputView().height))
-            cursorVisible = false
+            if (hideCursorOnPad) cursorVisible = false else showCursor(x, rect.centerY())
         }
         override fun onScroll(dx: Float, dy: Float) = scrollListener.onScroll(dx, dy)
         override fun onKey(evdev: Int, pressed: Boolean) = sendGuestKey(evdev, pressed)
@@ -3958,7 +3965,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             uiHandler.post { togglePcKeyboard() }
         }
         override fun onNavigate() {
-            cursorVisible = false
+            if (hideCursorOnPad) cursorVisible = false
         }
         override fun scrollSpeed(): Float = (pointerSurfaceRect()?.height() ?: 0f) * PAD_SCROLL_HEIGHTS_PER_S
     }
@@ -4046,12 +4053,20 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
     }
 
+    private fun applyHideCursorOnPad(on: Boolean) {
+        val revealing = hideCursorOnPad && !on
+        hideCursorOnPad = on
+        if (revealing && !pointerLocked && !clientHidesCursor && cursorPos.x >= 0f) {
+            showCursor(cursorPos.x, cursorPos.y, fromMouse = mouseOwnsCursor)
+        }
+    }
+
     private fun onPadInput() {
         if (inputUsesPointer && !pointerLocked) return
         lastPadInputMs = android.os.SystemClock.uptimeMillis()
         uiHandler.removeCallbacks(cursorHide)
         mouseOwnsCursor = false
-        cursorVisible = false
+        if (hideCursorOnPad) cursorVisible = false
     }
 
     private fun moveCapturedMouse(dx: Float, dy: Float) {
@@ -4074,10 +4089,10 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         if (fromMouse || !touchDrivesPointer()) uiHandler.postDelayed(cursorResync, 60)
         if (clientHidesCursor) { cursorVisible = false; return }
         if (!inputUsesPointer && !fromMouse && directTouchCursorHidden()) { cursorVisible = false; return }
-        if (!inputUsesPointer && android.os.SystemClock.uptimeMillis() - lastPadInputMs < CURSOR_PAD_HOLD_MS) return
+        if (hideCursorOnPad && !inputUsesPointer && android.os.SystemClock.uptimeMillis() - lastPadInputMs < CURSOR_PAD_HOLD_MS) return
         cursorVisible = true
         uiHandler.removeCallbacks(cursorHide)
-        if (!fromMouse && SessionState.mode == SessionService.MODE_STEAM && SessionState.steamUi != "desktop") uiHandler.postDelayed(cursorHide, 2500)
+        if (hideCursorOnPad && !fromMouse && SessionState.mode == SessionService.MODE_STEAM && SessionState.steamUi != "desktop") uiHandler.postDelayed(cursorHide, 2500)
     }
 
     private fun touchDrivesPointer(): Boolean =

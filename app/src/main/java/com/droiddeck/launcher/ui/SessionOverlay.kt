@@ -314,6 +314,8 @@ class DrawerActions(
     val onRelativeMouseMode: (Int) -> Unit = {},
     val directCursor: Boolean = false,
     val onDirectCursor: (Boolean) -> Unit = {},
+    val hideCursorOnPad: Boolean = true,
+    val onHideCursorOnPad: (Boolean) -> Unit = {},
     val onTouch: (String) -> Unit,
     val onInputSettings: () -> Unit = {},
     val onInputSelection: (com.droiddeck.launcher.input.InputRole?) -> Unit = {},
@@ -693,6 +695,10 @@ internal fun SessionDrawer(open: Boolean, requestedPage: SessionDrawerPage, cont
                                         SessionPrefs.TOUCH_PAD to stringResource(R.string.mode_touch_touchpad), SessionPrefs.TOUCH_GESTURES to stringResource(R.string.mode_touch_gestures),
                                         SessionPrefs.TOUCH_OFF to stringResource(R.string.widgets_off)),
                                     a.touchMode, chipModifier = focus.track(page, "touch"), onPick = a.onTouch)
+                                if (a.steam) ToggleRow(host, "hide-cursor-on-pad",
+                                    stringResource(R.string.input_hide_cursor_on_pad),
+                                    stringResource(R.string.input_hide_cursor_on_pad_hint), a.hideCursorOnPad,
+                                    chipModifier = focus.track(page, "hide-cursor-on-pad"), onChange = a.onHideCursorOnPad)
                                 if (a.touchActive == SessionPrefs.TOUCH_PAD)
                                     RelativeMouseRow(host, a, focus.track(page, "relative-mouse"))
                                 if (a.touchActive == SessionPrefs.TOUCH_DIRECT)

@@ -80,6 +80,7 @@ Links of the form `droiddeck://settings/<section>` open a Settings section direc
 | On-screen controls | In-game menu › Controller | on-screen, controls, touch controls, buttons |
 | Steam touch layout | In-game menu › Controller | touch layout, edit layout, on-screen |
 | PC keyboard | In-game menu › Controller | keyboard, typing |
+| Hide the cursor during controller play | In-game menu › Controller | mouse, cursor, pointer, controller, hide |
 | Report a problem | In-game menu › Session | logs, log, bug, crash, share, zip |
 | Background behavior | In-game menu › Session | sleep, background, native, resume |
 
@@ -100,4 +101,5 @@ Links of the form `droiddeck://settings/<section>` open a Settings section direc
 | Microphone | Steam or Desktop options (swipe up) › Audio | microphone, voice |
 | Background behavior | Steam or Desktop options (swipe up) › Session | sleep, background |
 | Library | Steam or Desktop options (swipe up) › Library | second library, sd card, steam library |
+| Hide the cursor during controller play | Steam or Desktop options (swipe up) › Controls | mouse, cursor, pointer, controller, hide |
 

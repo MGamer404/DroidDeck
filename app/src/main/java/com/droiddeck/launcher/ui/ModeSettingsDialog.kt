@@ -63,6 +63,7 @@ class ModeSettings(
     val upscaler: Int = 0,
     val upscaleSharpness: Int = 75,
     val touchMode: String,
+    val hideCursorOnPad: Boolean = true,
     val pen: SessionPrefs.Pen? = null,
     val suspendPolicy: String,
     val steamDownloadsInBackground: Boolean = false,
@@ -118,6 +119,7 @@ class ModeSettingsActions(
     val onUpscaler: (Int) -> Unit = {},
     val onUpscaleSharpness: (Int) -> Unit = {},
     val onTouch: (String) -> Unit,
+    val onHideCursorOnPad: (Boolean) -> Unit = {},
     val onPen: (key: String, value: String) -> Unit = { _, _ -> },
     val onSuspendPolicy: (String) -> Unit,
     val onSteamDownloadsInBackground: (Boolean) -> Unit = {},
@@ -295,6 +297,11 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
                 listOf(SessionPrefs.TOUCH_AUTO to stringResource(R.string.common_auto), SessionPrefs.TOUCH_PAD to stringResource(R.string.mode_touch_touchpad), SessionPrefs.TOUCH_DIRECT to stringResource(R.string.mode_touch_direct), SessionPrefs.TOUCH_GESTURES to stringResource(R.string.mode_touch_gestures), SessionPrefs.TOUCH_OFF to stringResource(R.string.widgets_off)), s.touchMode,
                 note = stringResource(R.string.mode_touch_note),
                 onPick = a.onTouch,
+            )
+            if (steam) ToggleRow(
+                host, "hide-cursor-on-pad", stringResource(R.string.input_hide_cursor_on_pad),
+                stringResource(R.string.input_hide_cursor_on_pad_hint),
+                s.hideCursorOnPad, onChange = a.onHideCursorOnPad,
             )
             if (steam && s.oscMode != null) ChoiceRow(
                 host, "osc", stringResource(R.string.mode_osc), null,

@@ -131,6 +131,7 @@ internal object SettingsIndex {
         d(R.string.drawer_page_controller, R.string.mode_osc, "on-screen", "controls", "touch controls", "buttons"),
         d(R.string.drawer_page_controller, R.string.osc_steam_layout, "touch layout", "edit layout", "on-screen"),
         d(R.string.drawer_page_controller, R.string.drawer_pc_keyboard, "keyboard", "typing"),
+        d(R.string.drawer_page_controller, R.string.input_hide_cursor_on_pad, "mouse", "cursor", "pointer", "controller", "hide"),
         d(R.string.mode_session, R.string.report_problem, "logs", "log", "bug", "crash", "share", "zip"),
         d(R.string.mode_session, R.string.mode_suspend, "sleep", "background", "native", "resume"),
 
@@ -143,6 +144,7 @@ internal object SettingsIndex {
         sh(R.string.mode_audio, R.string.mode_mic, "microphone", "voice"),
         sh(R.string.mode_session, R.string.mode_suspend, "sleep", "background"),
         sh(R.string.stores_tab_library, R.string.stores_tab_library, "second library", "sd card", "steam library"),
+        sh(R.string.drawer_page_controls, R.string.input_hide_cursor_on_pad, "mouse", "cursor", "pointer", "controller", "hide"),
     )
 
     fun search(context: Context, query: String): List<SettingsEntry> =
