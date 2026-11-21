@@ -210,6 +210,7 @@ class SessionInputPointerTest {
 
     @Test fun turningTheAutoHideOffRevealsACursorThatThePadHid() {
         SessionState.mode = SessionService.MODE_STEAM
+        SessionPrefs.setDirectCursor(activity, true)
         InputProfiles.select(activity, InputProfile.GAME)
         refresh()
         state<Offset>("cursorPos").value = Offset(500f, 300f)
