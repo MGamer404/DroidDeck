@@ -590,10 +590,12 @@ object SessionPrefs {
         prefs(context).edit().putBoolean("directCursor", on).apply()
     }
 
-    fun hideCursorOnPad(context: Context): Boolean = prefs(context).getBoolean("hideCursorOnPad", true)
+    fun hideCursorOnPad(context: Context, mode: String): Boolean =
+        mode != SessionService.MODE_STEAM || prefs(context).getBoolean("hideCursorOnPad.steam", true)
 
-    fun setHideCursorOnPad(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("hideCursorOnPad", on).apply()
+    fun setHideCursorOnPad(context: Context, mode: String, on: Boolean) {
+        if (mode != SessionService.MODE_STEAM) return
+        prefs(context).edit().putBoolean("hideCursorOnPad.steam", on).apply()
     }
 
     fun backHold(context: Context): Boolean = prefs(context).getBoolean("backHold", true)

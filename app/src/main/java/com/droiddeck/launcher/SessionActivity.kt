@@ -325,7 +325,9 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
     private var cursorPos by mutableStateOf(androidx.compose.ui.geometry.Offset(-100f, -100f))
     private var cursorVisible by mutableStateOf(false)
     private var floodColor by mutableStateOf<Int?>(null)
-    private val cursorHide = Runnable { cursorVisible = false }
+    private val cursorHide = Runnable { if (cursorShownByPad) hideCursorByPad() else hideCursorNow() }
+    private var padHidCursor = false
+    private var cursorShownByPad = false
     private var lastPadInputMs = 0L
     private val cursorBuf = IntArray(WaylandCompositor.CURSOR_BUF_INTS)
     private val cursorPosBuf = IntArray(2)
@@ -348,7 +350,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             if (::padMouse.isInitialized) padMouseMode()
             if (locked && ::touchpad.isInitialized) {
                 drawnRect()?.let { touchpad.place(it.centerX(), it.centerY()) }
-                cursorVisible = false
+                hideCursorNow()
             }
             if (!locked && mouseOwnsCursor) {
                 uiHandler.removeCallbacks(cursorResync)
@@ -365,7 +367,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
     private val cursorResync = object : Runnable {
         override fun run() {
             if (syncClientCursor() && clientHidesCursor) {
-                cursorVisible = false
+                hideCursorNow()
                 if (!mouseOwnsCursor) return
             }
             if (mouseOwnsCursor) {
@@ -1736,11 +1738,11 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             onDirectCursor = { on ->
                 SessionPrefs.setDirectCursor(this@SessionActivity, on)
                 directCursorOn = on
-                if (!on && directTouchCursorHidden()) cursorVisible = false
+                if (!on && directTouchCursorHidden()) hideCursorNow()
             },
             hideCursorOnPad = hideCursorOnPad,
             onHideCursorOnPad = { on ->
-                SessionPrefs.setHideCursorOnPad(this@SessionActivity, on)
+                SessionPrefs.setHideCursorOnPad(this@SessionActivity, SessionState.mode, on)
                 applyHideCursorOnPad(on)
             },
             onOsc = { v ->
@@ -2567,7 +2569,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
                     heldButtons.set(1, it, false)
                 }
             }
-            if (nextTouchMode == SessionPrefs.TOUCH_OFF || !usingTouchpad()) cursorVisible = false
+            if (nextTouchMode == SessionPrefs.TOUCH_OFF || !usingTouchpad()) hideCursorNow()
         }
         touchMode = nextTouchMode
         val nextPen = SessionPrefs.pen(this)
@@ -2594,7 +2596,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         evdevMouseOn = SessionPrefs.evdevMouse(this)
         if (!evdevMouseOn) releaseEvdevMouse()
         directCursorOn = SessionPrefs.directCursor(this)
-        applyHideCursorOnPad(SessionPrefs.hideCursorOnPad(this))
+        applyHideCursorOnPad(SessionPrefs.hideCursorOnPad(this, SessionState.mode))
         padType = SessionPrefs.steamController(this)
     }
 
@@ -3867,7 +3869,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             gesturePointerX = if (pointerLocked) x else x.coerceIn(rect.left, rect.right)
             gesturePointerY = if (pointerLocked) y else y.coerceIn(rect.top, rect.bottom)
             gesturePointerReady = true
-            cursorVisible = false
+            hideCursorNow()
         }
         override fun moveBy(dx: Float, dy: Float, relative: Boolean) {
             val rect = (if (pointerLocked) drawnRect() else pointerSurfaceRect()) ?: return
@@ -3929,7 +3931,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             val cx = x.coerceIn(rect.left, rect.right)
             val cy = y.coerceIn(rect.top, rect.bottom)
             WaylandCompositor.nativeSendPointer(1, InputSpace.x(cx, outputView().width), InputSpace.y(cy, outputView().height))
-            cursorVisible = false
+            hideCursorNow()
         }
         override fun onButton(button: Int, pressed: Boolean) {
             heldButtons.set(1, button, pressed)
@@ -3957,7 +3959,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             val rect = pointerSurfaceRect() ?: return
             val x = rect.left + rect.width() * PAD_SCROLL_POINTER_X
             WaylandCompositor.nativeSendPointer(1, InputSpace.x(x, outputView().width), InputSpace.y(rect.centerY(), outputView().height))
-            if (hideCursorOnPad) cursorVisible = false else showCursor(x, rect.centerY())
+            if (hideCursorOnPad) hideCursorByPad() else showCursor(x, rect.centerY(), fromPad = true)
         }
         override fun onScroll(dx: Float, dy: Float) = scrollListener.onScroll(dx, dy)
         override fun onKey(evdev: Int, pressed: Boolean) = sendGuestKey(evdev, pressed)
@@ -3965,7 +3967,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             uiHandler.post { togglePcKeyboard() }
         }
         override fun onNavigate() {
-            if (hideCursorOnPad) cursorVisible = false
+            if (hideCursorOnPad) hideCursorByPad()
         }
         override fun scrollSpeed(): Float = (pointerSurfaceRect()?.height() ?: 0f) * PAD_SCROLL_HEIGHTS_PER_S
     }
@@ -4021,21 +4023,21 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         val scale = sceneScale(rect)
         sendSceneDelta((x - rect.centerX()) * scale, (y - rect.centerY()) * scale)
         touchpad.place(rect.centerX(), rect.centerY())
-        cursorVisible = false
+        hideCursorNow()
     }
 
-    private fun movePointer(x: Float, y: Float, fromMouse: Boolean = false) {
+    private fun movePointer(x: Float, y: Float, fromMouse: Boolean = false, fromPad: Boolean = false) {
         val rect = pointerSurfaceRect() ?: return
         val cx = x.coerceIn(rect.left, rect.right)
         val cy = y.coerceIn(rect.top, rect.bottom)
         WaylandCompositor.nativeSendPointer(1, InputSpace.x(cx, outputView().width), InputSpace.y(cy, outputView().height))
-        showCursor(cx, cy, fromMouse)
+        showCursor(cx, cy, fromMouse, fromPad)
     }
 
     private fun moveInputPointer(dx: Float, dy: Float) {
         if (pointerLocked) {
             sendSceneDelta(dx, dy)
-            cursorVisible = false
+            hideCursorNow()
             return
         }
         val rect = if (glassesOutputActive) pointerSurfaceRect() else drawnRect()
@@ -4048,17 +4050,30 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             .coerceIn(pointerRect.left, pointerRect.right)
         val nextY = (y + dy * pointerRect.height() / out.second)
             .coerceIn(pointerRect.top, pointerRect.bottom)
-        movePointer(nextX, nextY)
+        movePointer(nextX, nextY, fromPad = true)
         // Make frame-callback updates visible to drawing before this frame's traversal.
         androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
     }
 
     private fun applyHideCursorOnPad(on: Boolean) {
-        val revealing = hideCursorOnPad && !on
+        val revealing = !on && padHidCursor
         hideCursorOnPad = on
-        if (revealing && !pointerLocked && !clientHidesCursor && cursorPos.x >= 0f) {
-            showCursor(cursorPos.x, cursorPos.y, fromMouse = mouseOwnsCursor)
+        if (!revealing) return
+        padHidCursor = false
+        if (!pointerLocked && !clientHidesCursor && cursorPos.x >= 0f) {
+            showCursor(cursorPos.x, cursorPos.y, fromMouse = mouseOwnsCursor, fromPad = true)
         }
+    }
+
+    private fun hideCursorByPad() {
+        if (!cursorVisible) return
+        cursorVisible = false
+        padHidCursor = true
+    }
+
+    private fun hideCursorNow() {
+        cursorVisible = false
+        padHidCursor = false
     }
 
     private fun onPadInput() {
@@ -4066,7 +4081,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         lastPadInputMs = android.os.SystemClock.uptimeMillis()
         uiHandler.removeCallbacks(cursorHide)
         mouseOwnsCursor = false
-        if (hideCursorOnPad) cursorVisible = false
+        if (hideCursorOnPad) hideCursorByPad()
     }
 
     private fun moveCapturedMouse(dx: Float, dy: Float) {
@@ -4080,19 +4095,21 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         )
     }
 
-    private fun showCursor(x: Float, y: Float, fromMouse: Boolean = false) {
+    private fun showCursor(x: Float, y: Float, fromMouse: Boolean = false, fromPad: Boolean = false) {
         cursorPos = androidx.compose.ui.geometry.Offset(x, y)
         syncClientCursor()
         mouseOwnsCursor = fromMouse
         uiHandler.removeCallbacks(cursorResync)
         cursorResyncIdle = 0
         if (fromMouse || !touchDrivesPointer()) uiHandler.postDelayed(cursorResync, 60)
-        if (clientHidesCursor) { cursorVisible = false; return }
-        if (!inputUsesPointer && !fromMouse && directTouchCursorHidden()) { cursorVisible = false; return }
+        if (clientHidesCursor) { hideCursorNow(); return }
+        if (!inputUsesPointer && !fromMouse && directTouchCursorHidden()) { hideCursorNow(); return }
         if (hideCursorOnPad && !inputUsesPointer && android.os.SystemClock.uptimeMillis() - lastPadInputMs < CURSOR_PAD_HOLD_MS) return
         cursorVisible = true
+        padHidCursor = false
+        cursorShownByPad = fromPad
         uiHandler.removeCallbacks(cursorHide)
-        if (hideCursorOnPad && !fromMouse && SessionState.mode == SessionService.MODE_STEAM && SessionState.steamUi != "desktop") uiHandler.postDelayed(cursorHide, 2500)
+        if (!fromMouse && (hideCursorOnPad || !fromPad) && SessionState.mode == SessionService.MODE_STEAM && SessionState.steamUi != "desktop") uiHandler.postDelayed(cursorHide, 2500)
     }
 
     private fun touchDrivesPointer(): Boolean =
@@ -4813,11 +4830,11 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         if (CompositorHost.isStarted &&
             (deliversTouches(routedTouchMode) || deliversTouches(next)))
             WaylandCompositor.nativeSendTouch(3, -1, 0, 0)
-        if (next == SessionPrefs.TOUCH_OFF) cursorVisible = false
+        if (next == SessionPrefs.TOUCH_OFF) hideCursorNow()
         gestureTouchStreamGate.reset()
         routedTouchMode = next
         requestRelativeMouse()
-        if (directTouchCursorHidden()) cursorVisible = false
+        if (directTouchCursorHidden()) hideCursorNow()
     }
 
     private fun deliversTouches(mode: String) =
@@ -4894,7 +4911,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
     }
 
     private fun sendMouseDelta(x: Float, y: Float) {
-        cursorVisible = false
+        hideCursorNow()
         val previousX = lastMouseX
         val previousY = lastMouseY
         lastMouseX = x
@@ -5306,7 +5323,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
         if (!mouseOwnsCursor || mouseAttached()) return
         mouseOwnsCursor = false
         uiHandler.removeCallbacks(cursorResync)
-        cursorVisible = false
+        hideCursorNow()
     }
 
     override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: android.content.res.Configuration) {
@@ -5341,7 +5358,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
     private fun onRelativeMouse(dx: Float, dy: Float) {
         if (pointerLocked) {
             sendSceneDelta(dx, dy)
-            cursorVisible = false
+            hideCursorNow()
         } else {
             grabDesktopMouse()
             moveCapturedMouse(dx, dy)
@@ -5733,7 +5750,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback, com.droidde
             hidePrimaryKeyboard()
             sessionClipboard.stop()
             padMotion?.stop()
-            cursorVisible = false
+            hideCursorNow()
             closeSecondScreen(reset = false)
             onScreenControls?.visibility = View.GONE
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

@@ -2646,7 +2646,7 @@ class FrontEndActivity : ComponentActivity(), com.droiddeck.launcher.ui.AgentPet
                 onUpscaler = { m -> SessionPrefs.setUpscaler(this, m); upscaler = m },
                 onUpscaleSharpness = { pct -> SessionPrefs.setUpscaleSharpness(this, pct); upscaleSharpness = pct },
                 onTouch = { t -> SessionPrefs.setTouchMode(this, t); touchMode = t },
-                onHideCursorOnPad = { on -> SessionPrefs.setHideCursorOnPad(this, on); hideCursorOnPad = on },
+                onHideCursorOnPad = { on -> SessionPrefs.setHideCursorOnPad(this, mode, on); hideCursorOnPad = on },
                 onPen = { key, value -> SessionPrefs.setPenSetting(this, key, value); pen = SessionPrefs.pen(this) },
                 onSuspendPolicy = { policy -> SessionPrefs.setSuspendPolicy(this, mode, policy); suspendPolicy = policy },
                 onSteamDownloadsInBackground = { enabled ->
@@ -2990,7 +2990,7 @@ class FrontEndActivity : ComponentActivity(), com.droiddeck.launcher.ui.AgentPet
         upscaleSharpness = SessionPrefs.upscaleSharpness(this)
         hdrReason = com.droiddeck.launcher.wayland.HdrSupport.probe(this).reason
         touchMode = SessionPrefs.touchMode(this)
-        hideCursorOnPad = SessionPrefs.hideCursorOnPad(this)
+        hideCursorOnPad = SessionPrefs.hideCursorOnPad(this, mode)
         if (!SessionPrefs.penSeen(this) && com.droiddeck.launcher.input.PenStream.penConnected()) SessionPrefs.setPenSeen(this)
         pen = SessionPrefs.pen(this).takeIf { SessionPrefs.penSeen(this) }
         suspendPolicy = SessionPrefs.suspendPolicy(this, mode)
